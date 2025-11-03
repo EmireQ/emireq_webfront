@@ -16,6 +16,5 @@ emireq-landing-page-dist.zip
 gcloud/
 .config/gcloud/
 service-account-key.json
-*.json
 application_default_credentials.json
 gcp_client.log
