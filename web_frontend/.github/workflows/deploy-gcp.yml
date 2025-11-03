@@ -1,0 +1,82 @@
+name: Deploy to Google Cloud App Engine
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: emireq-frontend
+
+jobs:
+  deploy:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: web_frontend/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd web_frontend
+        npm ci
+    
+    - name: Build application
+      run: |
+        cd web_frontend
+        npm run build
+    
+    - name: Setup Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        export_default_credentials: true
+    
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker --quiet
+    
+    - name: Build Docker image
+      run: |
+        cd web_frontend
+        docker build -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA .
+        docker tag gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+    
+    - name: Push Docker image
+      run: |
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+    
+    - name: Deploy to App Engine
+      run: |
+        cd web_frontend
+        gcloud app deploy app.yaml --quiet --version=$(echo $GITHUB_SHA | cut -c1-7)
+    
+    - name: Get deployment URL
+      id: deploy-url
+      run: |
+        URL=$(gcloud app browse --no-launch-browser 2>&1 | grep -o 'https://[^[:space:]]*' || echo "https://$PROJECT_ID.appspot.com")
+        echo "url=$URL" >> $GITHUB_OUTPUT
+    
+    - name: Comment PR with deployment URL
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 **Deployment successful!**\n\n📱 **Preview:** ${{ steps.deploy-url.outputs.url }}\n\n✨ Your changes are now live!'
+          })

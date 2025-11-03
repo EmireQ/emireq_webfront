@@ -1,5 +1,9 @@
 # Dependencies
 node_modules/
+gcp_cli/
+gcp_cli/
+
+
 
 # Build output
 dist/
@@ -7,3 +11,11 @@ build/
 
 # Distribution zip
 emireq-landing-page-dist.zip
+# GCP CLI files
+.gcloudignore
+gcloud/
+.config/gcloud/
+service-account-key.json
+*.json
+application_default_credentials.json
+gcp_client.log
